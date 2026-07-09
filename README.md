@@ -1,6 +1,6 @@
 # phase-lock-rag-api-llm-data-drift-preventer
 
-An API gateway middleware that helps reduce LLM/data drift by stabilizing noisy metric streams into a bounded 24-D representation.
+An API gateway middleware that helps reduce LLM/data drift using a full HRM manifold surgery runtime to stabilize noisy metric streams into a bounded 24-D representation.
 
 ## Product Shape
 
@@ -24,10 +24,11 @@ Stabilize response includes:
 - `drift_score`
 - `risk_level` (`green`, `yellow`, `red`)
 - `actions` (`pass`, `clamp`, `retry`, `fallback-model`, `human-review`)
+- internal diagnostics over time: energy/stress EMA, drift EMA/trend, topology volatility, surgery rate
 
 ### 3) Architecture
 
-- Rust crate (`phase_lock_core`): deterministic numerics, bounded output, high-throughput hot path.
+- Rust crate (`phase_lock_core`): deterministic HRM manifold runtime (mesh, Laplacian stress evolution, topology surgery), bounded output, high-throughput hot path.
 - Python FastAPI gateway: auth, policy, tenant isolation, observability, integration points.
 - PyO3/maturin bridge: Python invokes Rust core with near-C performance.
 - Optional stream integration points: Redis/Kafka adapters can be added in gateway layer.
@@ -48,6 +49,13 @@ gateway/
   api/routes_stabilize.py
   core/{auth.py,config.py,policy.py,replay.py,schemas.py,service.py,telemetry.py}
   integrations/stream.py
+sdk/
+  pyproject.toml
+  phase_lock_sdk/{__init__.py,client.py,types.py}
+examples/
+  langchain_llamaindex_integration.py
+notebooks/
+  rag_benchmark_before_after.ipynb
 rust/
   Cargo.toml
   pyproject.toml
@@ -144,6 +152,60 @@ curl -H "X-API-Key: replace-me" "http://127.0.0.1:8000/v1/telemetry"
 curl -H "X-API-Key: replace-me" "http://127.0.0.1:8000/v1/telemetry?format=prometheus"
 ```
 
+## Python SDK
+
+Install locally:
+
+```bash
+python -m pip install -e ./sdk
+```
+
+Use in code:
+
+```python
+from phase_lock_sdk import PhaseLockClient
+
+client = PhaseLockClient(base_url="http://127.0.0.1:8000", api_key="replace-me")
+out = client.stabilize(
+  tenant_id="acme",
+  request_id="sdk-001",
+  text="summarize drift",
+  embedding=[0.01, -0.02, 0.04],
+  metric_window=[0.2] * 24,
+)
+print(out["risk_level"], out["actions"])
+```
+
+## LangChain/LlamaIndex Integration
+
+- End-to-end example script: `examples/langchain_llamaindex_integration.py`
+- Integration point: post-retrieval, pre-generation middleware.
+- This keeps the framework dependency optional while demonstrating action routing.
+
+## Local Runtime With Compose
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Included files:
+
+- `.env.example` for runtime configuration
+- `docker-compose.yml` for local gateway orchestration
+
+## Benchmark Notebook (RAG Before/After)
+
+- Notebook: `notebooks/rag_benchmark_before_after.ipynb`
+- Measures baseline vs stabilized hallucination proxy over synthetic drift bursts.
+- Visualizes drift score and internal HRM diagnostics over time.
+
+Run:
+
+```bash
+jupyter notebook notebooks/rag_benchmark_before_after.ipynb
+```
+
 ## MVP Plan Coverage
 
 - Refactored engine boundary: no plotting/runtime script globals in gateway runtime.
@@ -180,3 +242,4 @@ helm install phase-lock-gateway ./helm/phase-lock-gateway
 - `metric_window` must contain at least 24 values.
 - Output vector is always bounded in `[-1, 1]` and length 24.
 - Drift score is bounded in `[0, 1]`.
+- Diagnostics now include stronger runtime metrics: `energy_level`, `stress_level`, `drift_ema`, `drift_trend`, `topology_volatility`, `surgery_rate`, `surgery_total`.

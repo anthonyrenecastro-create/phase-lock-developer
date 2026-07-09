@@ -38,6 +38,13 @@ impl DriftEngine {
         d.set_item("genus", out.genus)?;
         d.set_item("beta0", out.beta0)?;
         d.set_item("beta1", out.beta1)?;
+        d.set_item("energy_level", out.energy_level)?;
+        d.set_item("stress_level", out.stress_level)?;
+        d.set_item("drift_ema", out.drift_ema)?;
+        d.set_item("drift_trend", out.drift_trend)?;
+        d.set_item("topology_volatility", out.topology_volatility)?;
+        d.set_item("surgery_rate", out.surgery_rate)?;
+        d.set_item("surgery_total", out.surgery_total)?;
         Ok(d.into())
     }
 
