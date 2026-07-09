@@ -82,18 +82,27 @@ cd ..
 
 ```bash
 python -m pip install -r requirements-dev.txt
+python -m pip install -e .
 ```
 
 ### 3) Run API
 
 ```bash
 uvicorn gateway.main:app --reload --port 8000
+# or
+phase-lock-gateway
 ```
 
 Optional auth:
 
 ```bash
 export GATEWAY_API_KEY="replace-me"
+```
+
+Create local env file for compose/runtime settings:
+
+```bash
+cp .env.example .env
 ```
 
 ## Example request
@@ -125,6 +134,13 @@ Expected response shape:
     "genus": 0.0,
     "beta0": 1.0,
     "beta1": 0.0,
+    "energy_level": 0.0,
+    "stress_level": 0.0,
+    "drift_ema": 0.0,
+    "drift_trend": 0.0,
+    "topology_volatility": 0.0,
+    "surgery_rate": 0.0,
+    "surgery_total": 0.0,
     "breaker_open": 0.0,
     "spike_streak": 0.0,
     "effective_window": 24.0
