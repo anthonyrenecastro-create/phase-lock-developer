@@ -1,11 +1,44 @@
 # phase-lock-rag-api-llm-data-drift-preventer
 
-An API gateway that helps reduce LLM/data drift by stabilizing noisy metric streams into a bounded 24-D representation.
+An API gateway middleware that helps reduce LLM/data drift by stabilizing noisy metric streams into a bounded 24-D representation.
 
-## MVP Architecture
+## Product Shape
 
-- Rust core (`phase_lock_core`): deterministic 24-D stabilization engine with drift scoring and topology-inspired diagnostics.
-- Python FastAPI gateway: `/v1/stabilize`, `/v1/feedback`, `/v1/telemetry`, `/v1/health`.
+### 1) Core value proposition
+
+- Input: model outputs, embeddings, metadata, and metric streams.
+- Engine: 24-D mesh phase-lock with topology-aware stabilization in Rust.
+- Output: bounded corrected signal + drift score + risk/action policy.
+- Outcome: fewer hallucination cascades, lower retraining frequency, and lower infra spend.
+
+### 2) Commercial API contract
+
+- `POST /v1/stabilize`
+- `POST /v1/feedback`
+- `GET /v1/health`
+- `GET /v1/telemetry` (JSON or Prometheus text with `?format=prometheus`)
+
+Stabilize response includes:
+
+- `stabilized_vector[24]`
+- `drift_score`
+- `risk_level` (`green`, `yellow`, `red`)
+- `actions` (`pass`, `clamp`, `retry`, `fallback-model`, `human-review`)
+
+### 3) Architecture
+
+- Rust crate (`phase_lock_core`): deterministic numerics, bounded output, high-throughput hot path.
+- Python FastAPI gateway: auth, policy, tenant isolation, observability, integration points.
+- PyO3/maturin bridge: Python invokes Rust core with near-C performance.
+- Optional stream integration points: Redis/Kafka adapters can be added in gateway layer.
+
+## How Engine Concepts Map To Product Components
+
+- `SimplicialHRM` -> `DriftEngine`
+- `state_vector (24)` -> stabilized trust vector
+- `energy/genus/euler/betti` -> drift health diagnostics
+- topology surgery style behavior -> adaptive correction operators
+- symbolic/resonant forcing -> context + policy forcing terms
 
 ## Repository Layout
 
@@ -13,11 +46,17 @@ An API gateway that helps reduce LLM/data drift by stabilizing noisy metric stre
 gateway/
   main.py
   api/routes_stabilize.py
-  core/{schemas.py,policy.py,service.py}
+  core/{auth.py,config.py,policy.py,replay.py,schemas.py,service.py,telemetry.py}
+  integrations/stream.py
 rust/
   Cargo.toml
   pyproject.toml
   src/{lib.rs,engine.rs}
+helm/phase-lock-gateway/
+  Chart.yaml
+  values.yaml
+  templates/{deployment.yaml,service.yaml}
+Dockerfile
 ```
 
 ## Quickstart
@@ -43,10 +82,17 @@ python -m pip install -r requirements-dev.txt
 uvicorn gateway.main:app --reload --port 8000
 ```
 
+Optional auth:
+
+```bash
+export GATEWAY_API_KEY="replace-me"
+```
+
 ## Example request
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/v1/stabilize" \
+  -H "X-API-Key: replace-me" \
   -H "Content-Type: application/json" \
   -d '{
     "tenant_id":"acme",
@@ -70,9 +116,63 @@ Expected response shape:
     "euler_chi": 0.0,
     "genus": 0.0,
     "beta0": 1.0,
-    "beta1": 0.0
+    "beta1": 0.0,
+    "breaker_open": 0.0,
+    "spike_streak": 0.0,
+    "effective_window": 24.0
   }
 }
+```
+
+## Feedback and telemetry
+
+```bash
+curl -X POST "http://127.0.0.1:8000/v1/feedback" \
+  -H "X-API-Key: replace-me" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenant_id":"acme",
+    "request_id":"req-001",
+    "corrected":true,
+    "correction_score":0.92,
+    "observed_risk_level":"green"
+  }'
+```
+
+```bash
+curl -H "X-API-Key: replace-me" "http://127.0.0.1:8000/v1/telemetry"
+curl -H "X-API-Key: replace-me" "http://127.0.0.1:8000/v1/telemetry?format=prometheus"
+```
+
+## MVP Plan Coverage
+
+- Refactored engine boundary: no plotting/runtime script globals in gateway runtime.
+- Stable I/O schema: strict bounded Pydantic models.
+- Rust hot path: stabilization dynamics and diagnostics in `phase_lock_core`.
+- Gateway policy layer: risk thresholds + fallback hooks + circuit-breaker escalation.
+- Telemetry and SLOs: p95 latency, incidents prevented, false positives.
+- Packaging: Docker image and Helm chart for drop-in deployment.
+
+## Product Hardening Implemented
+
+- Determinism mode and seed controls via env settings.
+- Per-tenant engine isolation in service runtime.
+- Circuit-breakers on repeated drift spikes.
+- Replay test harness in `gateway/core/replay.py`.
+- Cost controls via step caps and compute budget metadata.
+
+## Deployment
+
+Build container:
+
+```bash
+docker build -t phase-lock-gateway:latest .
+```
+
+Install Helm chart:
+
+```bash
+helm install phase-lock-gateway ./helm/phase-lock-gateway
 ```
 
 ## Notes
